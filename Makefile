@@ -51,10 +51,10 @@ pull:
 .PHONY: get-jar
 ## get-jar: wget a few jar files into /tmp for scanning tests
 archive=archive.apache.org/dist/logging/log4j
-dlcdn=dlcdn.apache.org/logging/log4j/2.16.0
+dlcdn=dlcdn.apache.org/logging/log4j/2.17.0
 get-jar:
-	@wget https://$(dlcdn)/apache-log4j-2.16.0-bin.tar.gz -O /tmp/apache-log4j-2.16.0-bin.tar.gz
-	@(cd /tmp && tar xzf apache-log4j-2.16.0-bin.tar.gz)
+	@wget https://$(dlcdn)/apache-log4j-2.17.0-bin.tar.gz -O /tmp/apache-log4j-2.17.0-bin.tar.gz
+	@(cd /tmp && tar xzf apache-log4j-2.17.0-bin.tar.gz)
 	@wget https://$(archive)/2.9.1/apache-log4j-2.9.1-bin.tar.gz -O /tmp/apache-log4j-2.9.1-bin.tar.gz
 	@(cd /tmp && tar xzf apache-log4j-2.9.1-bin.tar.gz)
 	@wget https://$(archive)/1.0.4/jakarta-log4j-1.0.4.tar.gz -O /tmp/jakarta-log4j-1.0.4.tar.gz

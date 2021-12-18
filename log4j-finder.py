@@ -15,6 +15,9 @@
 #  Or multiple directories:
 #      $ python3 log4j-finder.py /path/to/dir1 /path/to/dir2
 #
+#  Exclude files or directories:
+#      $ python3 log4j-finder.py / --exclude "/*/.dontgohere" --exclude "/home/user/*.war"
+#
 import os
 import io
 import sys
@@ -28,6 +31,7 @@ import datetime
 import functools
 import itertools
 import collections
+import fnmatch
 
 from pathlib import Path
 
@@ -71,18 +75,21 @@ MD5_BAD = {
     "3bd9f41b89ce4fe8ccbf73e43195a5ce": "log4j 2.6 - 2.6.2",
     "415c13e7c8505fb056d540eac29b72fa": "log4j 2.7 - 2.8.1",
     "5824711d6c68162eb535cc4dbf7485d3": "log4j 2.12.0 - 2.12.1",
+    "102cac5b7726457244af1f44e54ff468": "log4j 2.12.2",
     "6b15f42c333ac39abacfeeeb18852a44": "log4j 2.1 - 2.3",
     "8b2260b1cce64144f6310876f94b1638": "log4j 2.4 - 2.5",
     "a193703904a3f18fb3c90a877eb5c8a7": "log4j 2.8.2",
     "f1d630c48928096a484e4b95ccb162a0": "log4j 2.14.0 - 2.14.1",
     # 2.15.0 vulnerable to Denial of Service attack (source: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-45046)
     "5d253e53fa993e122ff012221aa49ec3": "log4j 2.15.0",
+    # 2.16.0 vulnerable to Infinite recursion in lookup evaluation (source: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-45105)
+    "ba1cf8f81e7b31c709768561ba8ab558": "log4j 2.16.0",
 }
 
 # Known GOOD
 MD5_GOOD = {
-    # JndiManager.class (source: https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j-core/2.16.0/log4j-core-2.16.0.jar)
-    "ba1cf8f81e7b31c709768561ba8ab558": "log4j 2.16.0",
+    # JndiManager.class (source: https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j-core/2.17.0/log4j-core-2.17.0.jar)
+    "3dc5cf97546007be53b2f3d44028fa58": "log4j 2.17.0",
 }
 
 HOSTNAME = platform.node()
@@ -96,17 +103,20 @@ def md5_digest(fobj):
     return d.hexdigest()
 
 
-def iter_scandir(path, stats=None):
+def iter_scandir(path, stats=None, exclude=None):
     """
     Yields all files matcthing JAR_EXTENSIONS or FILENAMES recursively in path
     """
     p = Path(path)
     if p.is_file():
-        if stats:
+        if stats is not None:
             stats["files"] += 1
         yield p
+        return
+    if stats is not None:
+        stats["directories"] += 1
     try:
-        for entry in scantree(path, stats=stats):
+        for entry in scantree(path, stats=stats, exclude=exclude):
             if entry.is_symlink():
                 continue
             elif entry.is_file():
@@ -119,17 +129,20 @@ def iter_scandir(path, stats=None):
         log.debug(e)
 
 
-def scantree(path, stats=None):
+def scantree(path, stats=None, exclude=None):
     """Recursively yield DirEntry objects for given directory."""
+    exclude = exclude or [] 
     try:
         with os.scandir(path) as it:
             for entry in it:
+                if any(fnmatch.fnmatch(entry.path, exclusion) for exclusion in exclude):
+                    continue 
                 if entry.is_dir(follow_symlinks=False):
-                    if stats:
+                    if stats is not None:
                         stats["directories"] += 1
-                    yield from scantree(entry.path, stats=stats)
+                    yield from scantree(entry.path, stats=stats, exclude=exclude)
                 else:
-                    if stats:
+                    if stats is not None:
                         stats["files"] += 1
                     yield entry
     except IOError as e:
@@ -149,9 +162,15 @@ def iter_jarfile(fobj, parents=None, stats=None):
                 if zpath.name.lower() in FILENAMES:
                     yield (zinfo, zfile, zpath, parents)
                 elif zpath.name.lower().endswith(JAR_EXTENSIONS):
-                    yield from iter_jarfile(
-                        zfile.open(zinfo.filename), parents=parents + [zpath]
-                    )
+                    zfobj = zfile.open(zinfo.filename)
+                    try:
+                        # Test if we can open the zfobj without errors, fallback to BytesIO otherwise
+                        # see https://github.com/fox-it/log4j-finder/pull/22
+                        zipfile.ZipFile(zfobj)
+                    except zipfile.BadZipFile as e:
+                        log.debug(f"Got {zinfo}: {e}, falling back to BytesIO")
+                        zfobj = io.BytesIO(zfile.open(zinfo.filename).read())
+                    yield from iter_jarfile(zfobj, parents=parents + [zpath])
     except IOError as e:
         log.debug(f"{fobj}: {e}")
     except zipfile.BadZipFile as e:
@@ -240,8 +259,8 @@ def print_summary(stats):
 
 def main():
     parser = argparse.ArgumentParser(
-        description=f"%(prog)s v{__version__} - Find vulnerable log4j2 on filesystem (Log4Shell CVE-2021-4428, CVE-2021-45046)",
-        epilog="Files are scanned recursively, both on disk and in Java Archive Files",
+        description=f"%(prog)s v{__version__} - Find vulnerable log4j2 on filesystem (Log4Shell CVE-2021-4428, CVE-2021-45046, CVE-2021-45105)",
+        epilog="Files are scanned recursively, both on disk and in (nested) Java Archive Files",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -271,6 +290,13 @@ def main():
     parser.add_argument(
         "-V", "--version", action="version", version=f"%(prog)s {__version__}"
     )
+    parser.add_argument(
+        "-e",
+        "--exclude",
+        action='append',
+        help="exclude files/directories by pattern (can be used multiple times)",
+        metavar='PATTERN'
+    )
     args = parser.parse_args()
     logging.basicConfig(
         format="%(asctime)s %(levelname)s %(message)s",
@@ -296,7 +322,7 @@ def main():
         now = datetime.datetime.utcnow().replace(microsecond=0)
         if not args.quiet:
             print(f"[{now}] {hostname} Scanning: {directory}")
-        for p in iter_scandir(directory, stats=stats):
+        for p in iter_scandir(directory, stats=stats, exclude=args.exclude):
             if p.name.lower() in FILENAMES:
                 stats["scanned"] += 1
                 log.info(f"Found file: {p}")
@@ -319,11 +345,9 @@ def main():
                             # If we find JndiManager.class, we also check if JndiLookup.class exists
                             has_lookup = True
                             if zpath.name.lower().endswith("JndiManager.class".lower()):
-                                lookup_path = str(
-                                    zpath.parent.parent / "lookup/JndiLookup.class"
-                                )
+                                lookup_path = zpath.parent.parent / "lookup/JndiLookup.class"
                                 try:
-                                    has_lookup = zfile.open(lookup_path)
+                                    has_lookup = zfile.open(lookup_path.as_posix())
                                 except KeyError:
                                     has_lookup = False
                             check_vulnerable(zf, parents + [zpath], stats, has_lookup)

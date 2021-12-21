@@ -35,7 +35,7 @@ import fnmatch
 
 from pathlib import Path
 
-__version__ = "1.0.1"
+__version__ = "1.2.0"
 FIGLET = f"""\
  __               _____  __         ___ __           __
 |  |.-----.-----.|  |  ||__|______.'  _|__|.-----.--|  |.-----.----.
@@ -56,7 +56,7 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 # Java Archive Extensions
-JAR_EXTENSIONS = (".jar", ".war", ".ear")
+JAR_EXTENSIONS = (".jar", ".war", ".ear", ".zip")
 
 # Filenames to find and MD5 hash (also recursively in JAR_EXTENSIONS)
 # Currently we just look for JndiManager.class
@@ -174,6 +174,9 @@ def iter_jarfile(fobj, parents=None, stats=None):
     except IOError as e:
         log.debug(f"{fobj}: {e}")
     except zipfile.BadZipFile as e:
+        log.debug(f"{fobj}: {e}")
+    except RuntimeError as e:
+        # RuntimeError: File 'encrypted.zip' is encrypted, password required for extraction
         log.debug(f"{fobj}: {e}")
 
 
@@ -301,12 +304,13 @@ def main():
     logging.basicConfig(
         format="%(asctime)s %(levelname)s %(message)s",
     )
+    python_version = platform.python_version()
     if args.verbose == 1:
         log.setLevel(logging.INFO)
-        log.info("info logging enabled")
+        log.info(f"info logging enabled - log4j-finder {__version__} - Python {python_version}")
     elif args.verbose >= 2:
         log.setLevel(logging.DEBUG)
-        log.debug("debug logging enabled")
+        log.debug(f"debug logging enabled - log4j-finder {__version__} - Python {python_version}")
 
     if args.no_color:
         global NO_COLOR
@@ -338,7 +342,7 @@ def main():
                     log.info(f"Found jar file: {p}")
                     stats["scanned"] += 1
                     for (zinfo, zfile, zpath, parents) in iter_jarfile(
-                        p.resolve().open("rb"), parents=[p.resolve()]
+                        p.open("rb"), parents=[p]
                     ):
                         log.info(f"Found zfile: {zinfo} ({parents}")
                         with zfile.open(zinfo.filename) as zf:

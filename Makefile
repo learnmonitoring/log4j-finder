@@ -1,7 +1,7 @@
 # Makefile template Originated from https://github.com/learnmonitoring/scan4log4shell/blob/main/Makefile
 PROJECTNAME=$(shell basename "$(PWD)")
 
-# Go related variables.
+
 # Make is verbose in Linux. Make it silent.
 MAKEFLAGS += --silent
 

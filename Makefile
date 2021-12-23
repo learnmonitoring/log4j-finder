@@ -1,4 +1,4 @@
-# Makefile template Originated from https://github.com/learnmonitoring/scan4log4shell/blob/main/Makefile
+# Makefile template originated from https://github.com/learnmonitoring/scan4log4shell/blob/main/Makefile
 PROJECTNAME=$(shell basename "$(PWD)")
 
 

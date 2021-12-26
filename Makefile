@@ -41,7 +41,7 @@ vermin:
 .PHONY: build
 ## build: Use pyinstaller to bulid binary log4j-finder in dist
 build: 
-	@~/.local/bin/pyinstaller --onefile log4j-finder.spec
+	@pyinstaller --onefile log4j-finder.spec
 
 .PHONY: pull
 ## pull: run git pull 

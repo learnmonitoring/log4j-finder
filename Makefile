@@ -68,3 +68,21 @@ c7setup:
 	@sudo yum-config-manager --enable rhel-server-rhscl-7-rpms
 	@sudo yum install -y devtoolset-7
 	@scl enable devtoolset-7 bash
+
+# support auguments after Makefile
+#https://stackoverflow.com/questions/6273608/how-to-pass-argument-to-makefile-from-command-line
+args = `arg="$(filter-out $@,$(MAKECMDGOALS))" && echo $${arg:-${1}}`
+%:
+	@:
+commitall:
+	@git commit -a -m "lazy commit via make gitpush"
+status:
+	git status
+
+.PHONY: push
+## push: make push commit-all-message, provide default msg if null 
+push:
+	@git commit -am "$(call args, Pardon this automated commit message without exacts, read code changes.)"  && git pus\
+h
+diff:
+	@git diff

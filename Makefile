@@ -86,3 +86,9 @@ push:
 h
 diff:
 	@git diff
+
+pyenv:
+	@pyenv versions
+	@pyenv activate log4j
+	@python -m pip install pipenv six
+	@pip  list | egrep 'pipenv|six'

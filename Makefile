@@ -94,3 +94,10 @@ pyenv:
 	@pyenv activate log4j
 	@python -m pip install pipenv six
 	@pip  list | egrep 'pipenv|six'
+
+onlog4j:
+	@pyenv activate log4j
+	@pip  list | egrep 'pipenv|six'
+
+offlog4j:
+	@pyenv deactivate log4j
